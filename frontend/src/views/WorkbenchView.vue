@@ -86,6 +86,8 @@
       </form>
     </div>
 
+    <TrialPanel v-if="showsTrial" :meta="meta" />
+
     <footer class="page-foot">
       <span>共 {{ total }} 条{{ meta.name }}记录</span>
       <span v-if="errorMessage" class="error-text">{{ errorMessage }}</span>
@@ -104,9 +106,12 @@ import {
   runAction as applyAction,
 } from '@/api/backend-service'
 import type { EntryRow } from '@/data/types'
+import TrialPanel from '@/views/TrialPanel.vue'
 
 const props = defineProps<{ moduleKey: string }>()
 const meta = moduleMeta(props.moduleKey)
+// 只有模板规则和探针选择承载试跑闭环，其他模块不渲染。
+const showsTrial = ['template_rule', 'probe_selector'].includes(meta.key)
 const rows = ref<EntryRow[]>([])
 const total = ref(0)
 const errorMessage = ref('')

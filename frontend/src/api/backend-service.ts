@@ -59,3 +59,53 @@ export async function loadOverview(): Promise<OverviewResult> {
   if (!response.ok) throw new Error('运营概览读取失败')
   return await response.json()
 }
+
+// ----------------------------------------------------------------------
+// 模板 ↔ 探针试跑
+// ----------------------------------------------------------------------
+async function getJson<T>(path: string, fallback: string): Promise<T> {
+  const response = await request(path)
+  if (!response.ok) throw new Error(fallback)
+  return (await response.json()) as T
+}
+
+async function postJson<T>(path: string, body: unknown, fallback: string): Promise<T> {
+  const response = await request(path, { method: 'POST', body: JSON.stringify(body) })
+  if (!response.ok) throw new Error(fallback)
+  return (await response.json()) as T
+}
+
+export const getTemplateTrialConfig = (id: number, probeId?: number) =>
+  getJson<any>(
+    `/api/template_rule/${id}/trial-config${probeId ? `?probe_id=${probeId}` : ''}`,
+    '试跑配置读取失败',
+  )
+
+export const getProbeTrialReadiness = (probeId: number) =>
+  getJson<any>(`/api/probe_selector/${probeId}/trial-readiness`, '探针试跑配置读取失败')
+
+export const startTemplateTrial = (id: number, payload: Record<string, unknown> = {}) =>
+  postJson<any>(`/api/template_rule/${id}/trial-runs`, payload, '试跑发起失败')
+
+export const startProbeTrial = (probeId: number, payload: Record<string, unknown> = {}) =>
+  postJson<any>(`/api/probe_selector/${probeId}/trial-runs`, payload, '探针试跑发起失败')
+
+export const retryTrial = (trialId: number, definitionHash?: string) =>
+  postJson<any>(`/api/probe_trial/${trialId}/retry`, { definition_hash: definitionHash }, '试跑重试失败')
+
+export const getComparison = (trialId: number) =>
+  getJson<any>(`/api/probe_trial/${trialId}/comparison`, '轮次对比读取失败')
+
+export const getPendingFields = (templateId: number) =>
+  getJson<any>(`/api/template_rule/${templateId}/pending-fields`, '待补字段读取失败')
+
+export const updateTemplateSelectors = (
+  templateId: number,
+  payload: Record<string, unknown>,
+) => postJson<any>(`/api/template_rule/${templateId}/selectors`, payload, '选择器保存失败')
+
+export const getProbeDiagnostics = (probeId: number) =>
+  getJson<any>(`/api/probe_selector/${probeId}/page-diagnostics`, '页面级诊断读取失败')
+
+export const getTemplateTrials = (templateId: number) =>
+  getJson<any>(`/api/template_rule/${templateId}/trials`, '试跑轮次读取失败')

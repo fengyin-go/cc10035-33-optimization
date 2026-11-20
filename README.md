@@ -77,5 +77,35 @@ npm run dev
 - 列表接口统一返回 `{ items, total, page, size }`，动作接口统一返回 `{ ok, message }`。
 - 状态流转只允许在 `app/services` 里改，路由层不做业务判断。
 
+## 探针试跑闭环（模板规则 ↔ 探针选择）
+
+模板规则与探针选择两个模块的列表下方有「探针试跑」面板，也可以直接调接口：
+
+| 能力 | 接口 |
+| --- | --- |
+| 模板建议探针 | `GET /api/template_rule/{id}/probe-suggestions` |
+| 本轮试跑配置来源 | `GET /api/template_rule/{id}/trial-config` |
+| 发起试跑 | `POST /api/template_rule/{id}/trial-runs` |
+| 探针入口试跑 | `POST /api/probe_selector/{id}/trial-runs` |
+| 补选择器 | `POST /api/template_rule/{id}/selectors` |
+| 待补字段清单 | `GET /api/template_rule/{id}/pending-fields` |
+| 轮次对比 | `GET /api/probe_trial/{id}/comparison` |
+| 采集中断重试 | `POST /api/probe_trial/{id}/retry` |
+| 页面级诊断 | `GET /api/probe_selector/{id}/page-diagnostics` |
+
+约定：
+
+- 模板没有有效选择器时，建议探针返回空数组；不能派发空选择器探针。
+- 试跑定义由模板版本、页面、探针和字段/选择器配对共同决定，落库后不再变化。
+- 中断重试必须命中同一 `试跑定义哈希`；改字段后要重新安排本页的正式试跑。
+- 只有全部目标字段采样成功的轮次才写 `正式字段快照`，其余轮次只产出
+  `部分字段数据集` 或 `无有效字段数据集`。
+- 待补字段清单回写到模板规则；页面级诊断只提供带实际采样出处的 DOM 定位证据，
+  一律标记为未验收，不计入字段覆盖。
+- 兼容历史探针保留采样出处，但旧字段不参与新版试跑。
+
+演示数据自带同一页面的两版模板：`id=101`（v1，选择器完整、有正式试跑历史）
+与 `id=102`（v2，管理员新发布、暂无选择器），以及挂在 v1 上的旧探针 `id=101`。
+
 领域：数据工程
 子方向：数据采集、爬虫与RPA

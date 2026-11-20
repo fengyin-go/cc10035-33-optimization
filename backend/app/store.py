@@ -14,12 +14,20 @@ class Store:
         self._tables: dict[str, list[dict[str, Any]]] = {
             name: [dict(row) for row in rows] for name, rows in SEED_ROWS.items()
         }
+        # 辅助表：试跑轮次这类从属数据不进业务模块清单，避免污染 18 个模块的看板。
+        self._aux: dict[str, list[dict[str, Any]]] = {"probe_trial": []}
+        from app.seed_demo import bootstrap
+
+        bootstrap(self)
 
     def module_names(self) -> list[str]:
         return sorted(self._tables)
 
     def rows(self, module: str) -> list[dict[str, Any]]:
         return self._tables.setdefault(module, [])
+
+    def aux_rows(self, name: str) -> list[dict[str, Any]]:
+        return self._aux.setdefault(name, [])
 
     def find(self, module: str, entry_id: int) -> dict[str, Any] | None:
         for row in self.rows(module):

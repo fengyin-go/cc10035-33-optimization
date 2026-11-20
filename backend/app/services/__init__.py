@@ -21,6 +21,8 @@ from app.services.output_target import OutputTargetService
 from app.services.extract_studio import ExtractStudioService
 from app.services.aggregate_view import AggregateViewService
 
+# probe_trial 是试跑轮次的辅助服务，不挂在 18 个业务模块下：
+# 它没有独立的列表页，轮次通过模板/探针的试跑接口读取，避免看板模块数被改动。
 SERVICES: dict[str, BaseModuleService] = {
     "dom_parser": DomParserService(),
     "entity_extract": EntityExtractService(),

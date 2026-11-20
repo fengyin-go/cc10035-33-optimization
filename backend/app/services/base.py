@@ -50,6 +50,12 @@ class BaseModuleService:
         ]
         if missing:
             return None, missing
+        blocking = [
+            issue for issue in self.validation_issues(values)
+            if issue.get("severity") == "error"
+        ]
+        if blocking:
+            return None, [issue.get("message", issue.get("field", "")) for issue in blocking]
         rows = store.rows(self.MODULE)
         entry = {"id": max((int(row.get("id", 0)) for row in rows), default=0) + 1}
         entry.update({field: values.get(field) for field in self.LIST_FIELDS})
@@ -59,6 +65,14 @@ class BaseModuleService:
         rows.append(entry)
         return entry, []
 
+    def validation_issues(self, values: dict[str, Any]) -> list[dict[str, Any]]:
+        """登记前的字段校验，默认不做额外判断。"""
+        return []
+
+    def action_issues(self, entry: dict[str, Any], action: str) -> list[dict[str, Any]]:
+        """状态流转前的校验，默认不做额外判断。"""
+        return []
+
     def run_action(self, entry_id: int, action: str) -> tuple[dict[str, Any] | None, str]:
         entry = store.find(self.MODULE, entry_id)
         if entry is None:
@@ -66,9 +80,16 @@ class BaseModuleService:
         target = self.ACTION_RULES.get(action)
         if target is None:
             return None, f"动作「{action}」不属于{self.MODULE}可执行范围"
+        blocking = [
+            issue for issue in self.action_issues(entry, action)
+            if issue.get("severity") == "error"
+        ]
+        if blocking:
+            return None, "；".join(issue.get("message", "") for issue in blocking)
         entry["status"] = target
         entry["pending"] = target != self.STATUS_ORDER[-1]
         entry["abnormal"] = action in self.NEGATIVE_ACTIONS
+        entry["validation_issues"] = self.action_issues(entry, action)
         return entry, f"{self.ENTITY}已{action}"
 
     def domain_snapshot(self) -> dict[str, Any]:

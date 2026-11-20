@@ -10,6 +10,7 @@ from fastapi.responses import StreamingResponse
 
 from app.schemas import ActionPayload, ActionResult, EntryPayload, PageResult
 from app.services import service_for
+from app.store import store
 
 router = APIRouter(prefix="/api", tags=["业务资源"])
 
@@ -96,3 +97,123 @@ def run_action(module: str, entry_id: int, payload: ActionPayload) -> ActionResu
     service = require_service(module)
     entry, message = service.run_action(entry_id, payload.action.strip())
     return ActionResult(ok=entry is not None, message=message, entry=entry)
+
+
+# ----------------------------------------------------------------------
+# 模板 ↔ 探针试跑：领域动作接口
+# ----------------------------------------------------------------------
+@router.get("/template_rule/{entry_id}/probe-suggestions", response_model=dict)
+def template_probe_suggestions(entry_id: int) -> dict[str, Any]:
+    from app.services.template_rule import TemplateRuleService
+
+    return TemplateRuleService().suggest_probes(entry_id)
+
+
+@router.get("/template_rule/{entry_id}/trial-config", response_model=dict)
+def template_trial_config(entry_id: int, probe_id: int | None = Query(default=None)) -> dict[str, Any]:
+    from app.services.template_rule import TemplateRuleService
+
+    return TemplateRuleService().trial_config(entry_id, probe_id)
+
+
+@router.get("/template_rule/{entry_id}/pending-fields", response_model=dict)
+def template_pending_fields(entry_id: int) -> dict[str, Any]:
+    from app.services.template_rule import TemplateRuleService
+
+    return TemplateRuleService().pending_fields(entry_id)
+
+
+@router.post("/template_rule/{entry_id}/selectors", response_model=dict)
+def template_update_selectors(entry_id: int, payload: dict[str, Any]) -> dict[str, Any]:
+    from app.services.template_rule import TemplateRuleService
+
+    return TemplateRuleService().update_selectors(
+        entry_id,
+        field=payload.get("field"),
+        selector=payload.get("selector"),
+        selectors=payload.get("selectors"),
+        target_fields=payload.get("target_fields"),
+    )
+
+
+@router.get("/template_rule/{entry_id}/trials", response_model=dict)
+def template_trials(entry_id: int) -> dict[str, Any]:
+    from app.services.probe_trial import ProbeTrialService
+    from app.services.template_rule import TemplateRuleService
+
+    rows = ProbeTrialService().list_for_template(entry_id)
+    return {
+        "items": rows,
+        "total": len(rows),
+        "template": TemplateRuleService().pending_fields(entry_id),
+    }
+
+
+@router.post("/template_rule/{entry_id}/trial-runs", response_model=dict)
+def template_start_trial(entry_id: int, payload: dict[str, Any] | None = None) -> dict[str, Any]:
+    from app.services.probe_trial import ProbeTrialService
+
+    payload = payload or {}
+    return ProbeTrialService().start_trial(
+        entry_id,
+        probe_id=payload.get("probe_id"),
+        retry_of=payload.get("retry_of"),
+        definition_hash_value=payload.get("definition_hash"),
+        entry=str(payload.get("entry") or "模板规则"),
+    )
+
+
+@router.get("/probe_selector/{entry_id}/trial-readiness", response_model=dict)
+def probe_trial_readiness(entry_id: int) -> dict[str, Any]:
+    from app.services.probe_selector import ProbeSelectorService
+    from app.services.template_rule import TemplateRuleService
+
+    probe = store.find("probe_selector", entry_id)
+    if probe is None:
+        raise HTTPException(status_code=404, detail=f"探针 {entry_id} 不存在或已归档")
+    page = (probe.get("目标页面") or "").strip()
+    template = TemplateRuleService().resolve_trial_template(page)
+    if template is None:
+        return {"ok": False, "reason": f"页面 {page} 没有可试跑的模板"}
+    return TemplateRuleService().trial_config(int(template.get("id")), entry_id)
+
+
+@router.post("/probe_selector/{entry_id}/trial-runs", response_model=dict)
+def probe_start_trial(entry_id: int, payload: dict[str, Any] | None = None) -> dict[str, Any]:
+    from app.services.probe_selector import ProbeSelectorService
+
+    payload = payload or {}
+    return ProbeSelectorService().run_trial(
+        entry_id,
+        template_id=payload.get("template_id"),
+        retry_of=payload.get("retry_of"),
+    )
+
+
+@router.get("/probe_selector/{entry_id}/page-diagnostics", response_model=dict)
+def probe_page_diagnostics(entry_id: int) -> dict[str, Any]:
+    from app.services.probe_selector import ProbeSelectorService
+
+    return ProbeSelectorService().page_diagnostics(entry_id)
+
+
+@router.get("/probe_trial/{entry_id}/detail", response_model=dict)
+def trial_detail(entry_id: int) -> dict[str, Any]:
+    from app.services.probe_trial import ProbeTrialService
+
+    return ProbeTrialService().trial_detail(entry_id)
+
+
+@router.post("/probe_trial/{entry_id}/retry", response_model=dict)
+def trial_retry(entry_id: int, payload: dict[str, Any] | None = None) -> dict[str, Any]:
+    from app.services.probe_trial import ProbeTrialService
+
+    payload = payload or {}
+    return ProbeTrialService().retry_trial(entry_id, payload.get("definition_hash"))
+
+
+@router.get("/probe_trial/{entry_id}/comparison", response_model=dict)
+def trial_comparison(entry_id: int) -> dict[str, Any]:
+    from app.services.probe_trial import ProbeTrialService
+
+    return ProbeTrialService().compare_rounds(entry_id)
